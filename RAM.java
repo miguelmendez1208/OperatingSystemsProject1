@@ -12,10 +12,13 @@ public class RAM {
 
 	public static void main(String args[]) {
 		try {
-			readFile("sample1.txt");
-			listen();
+			if (args.length > 0) {
+				readFile(args[0]);
+			} else {
+				readFile("sample1.txt");
+			}
+			listen(); // listening function, repeatedly takes in commands, then returns output
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 
@@ -36,8 +39,6 @@ public class RAM {
 		try {
 			readFile(name);
 			listen();
-
-			// listen(); // call listening while loop
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -50,7 +51,7 @@ public class RAM {
 		String command = null;
 		while (sc.hasNext()) { // while there is another input
 			command = sc.nextLine(); // read input
-			String[] commandArray = command.split(" ");
+			String[] commandArray = command.split(" ");// split the input up
 			if (commandArray[0].equals("read")) { // maybe change this to the number input for read
 				int addre = Integer.parseInt(commandArray[1]); // get the address from the input
 				System.out.println(readMemory(addre)); // call the read memory function with the address
@@ -59,9 +60,7 @@ public class RAM {
 				int addre = Integer.parseInt(commandArray[2]); // get the address from the input
 				writeMemory(valu, addre); // call the write function with the value and the address
 			}
-
 		}
-
 	}
 
 	public static void readFile() throws IOException {

@@ -1,43 +1,59 @@
 package osProject;
 
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.PrintWriter;
 import java.util.Scanner;
 import java.lang.Runtime;
 import java.io.*;
 
 public class CPU {
-	public static int PC;
-	public static int SP;
-	public static int IR;
+	public static int PC; // PC Counter
+	public static int SP; // Stack Pointer Counter
+	public static int IR; // Instruction Register
 	public static int AC;
 	public static int X;
 	public static int Y;
+	public static boolean end; // use this to break process
+	public static boolean KernelMode; // KernelMode
+	public static int count;// Counter (not implemented)
+	public static int timer;// timer (not implemented)
 
 	public CPU() {
 	}
 
 	public static void main(String args[]) {
 		PC = -1;
-		SP = 1000;
+		SP = 999; //end of user memory
+		KernelMode = false;
+		end = false;
 		try {
 			int x;
 			Runtime rt = Runtime.getRuntime();
-
-			Process proc = rt.exec("java RAM.java");
+			String command = " ";
+			if (args.length > 0) {
+				command = "java RAM.java " + args[0];
+			} else {
+				command = "java RAM.java";
+			}
+			// if(args.length >1) {
+			// timer = Integer.parseInt(args[1]);
+			// }else {
+			// timer = 10;
+			// }
+			Process proc = rt.exec(command);
 
 			InputStream is = proc.getInputStream();
 			OutputStream os = proc.getOutputStream();
 
 			PrintWriter pw = new PrintWriter(os);
+			// BufferedReader sc = new BufferedReader(new InputStreamReader(is)); //Buffered
+			// reader wrapped over input stream reader wrapped over InputStream XD
 			while (!isAtEnd()) {
 				ScanToken(pw, is);
 			}
 
-			//exit stuff idk
-			proc.waitFor(); // ??
+			// exit stuff idk
+			proc.destroy(); // end the sub process
 			int exitVal = proc.exitValue();
+			System.out.println(" ");
 			System.out.println("Process exited: " + exitVal);
 
 		} catch (Throwable t) {
@@ -45,29 +61,51 @@ public class CPU {
 		}
 	}
 
-	public static void testFunction(PrintWriter pw, InputStream is) {
-		pw.printf("read 0"); // print "read X\n" to the print writer
-		pw.flush(); // Printwriter is just the RAM's input, so you're telling RAM "read _"
-		Scanner sc = new Scanner(is); // initialize scanner to receive input
-		String line = sc.nextLine();// get the output through the scanners next line.
-		System.out.println(line);
-	}
-	
 	// pw = input into ram, is = output from ram
 	public static int readNextInstruction(PrintWriter pw, InputStream is) { // This probably should be renamed to
-		int num = 0;																	// "readNextValue"
+		int num = 0; // "readNextValue"
 		PC++;
-		pw.println("read " + PC); // print "read X\n" to the print writer
+		String statement = "read " + PC + "\n";
+		if (PC >= 1000 && KernelMode == false) { // memory access violation
+			Int(pw, is);
+		}
+		pw.printf(statement); // print "read X\n" to the print writer
 		pw.flush(); // Printwriter is just the RAM's input, so you're telling RAM "read _"
-		Scanner sc = new Scanner(is); // initialize scanner to receive input
-		String line = sc.nextLine();// get the output through the scanners next line.
-		num = Integer.parseInt(line); // translate output(input?) to an int
-		sc.close(); // close scanner unnecessary?
+		BufferedReader sc = new BufferedReader(new InputStreamReader(is)); // Buffered reader wrapped over input stream
+																			// reader wrapped over InputStream XD
+		String line;
+		try {
+			line = sc.readLine();// get the output through the scanners next line.
+			num = Integer.parseInt(line); // translate output(input?) to an int
+			return num; // return the int
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		return num; // return the int
+	}
+
+	public static int readInstructionX(PrintWriter pw, InputStream is, int val) {
+		int num = 0;
+		String statement = "read " + val + "\n";
+		if (val > 1000 && KernelMode == false) { // memory access violation
+			Int(pw, is);
+		}
+		pw.printf(statement); // print "read X\n" to the print writer
+		pw.flush(); // Printwriter is just the RAM's input, so you're telling RAM "read _"
+		BufferedReader sc = new BufferedReader(new InputStreamReader(is)); // Buffered reader wrapped over input stream
+																			// reader wrapped over InputStream XD
+		try {
+			String line = sc.readLine();
+			num = Integer.parseInt(line); // translate output(input?) to an int
+			return num; // return the int
+		} catch (IOException e) {
+			e.printStackTrace();
+		} // get the output through the scanners next line.
 		return num; // return the int
 	}
 
 	public static boolean isAtEnd() { // return if pc is past the end
-		return PC >= 999;
+		return (PC >= 999) | (end == true);
 	}
 
 	public static boolean isAtSystemEnd() {
@@ -75,17 +113,23 @@ public class CPU {
 	}
 
 	public static void printAll() {
-		System.out.println("PC = " + PC);
-		System.out.println("SP = " + SP);
-		System.out.println("IR = " + IR);
-		System.out.println("AC = " + AC);
-		System.out.println("X = " + X);
-		System.out.println("Y = " + Y);
+		System.out.print("{PC = " + (PC + 1));
+		System.out.print(", SP = " + SP);
+		System.out.print(", IR = " + IR);
+		System.out.print(", AC = " + AC);
+		System.out.print(", X = " + X);
+		System.out.print(", Y = " + Y + "}");
 	}
 
 	public static void ScanToken(PrintWriter pw, InputStream is) {
 		IR = readNextInstruction(pw, is);// this to read instruction
 		int val = 0;// place holder value. this to read value / argument :)
+		// printAll();
+		count++;
+		// if(count>=timer && KernelMode==false) { //Couldn't get the timer interrupt to
+		// work
+		// TimerInt(pw,is);
+		// }
 		switch (IR) {
 		case 1:
 			val = readNextInstruction(pw, is); // load value into ac
@@ -181,94 +225,68 @@ public class CPU {
 			Pop(pw, is);
 			break;
 		case 29:
-			Int(pw, is);// ???
+			if (!KernelMode) {
+				Int(pw, is);// ???
+			}
 			break;
 		case 30:
 			IRet(pw, is);// ???
 			break;
 		case 50:
+			end = true;
 			return;
+		case 0:
+			// do nothing;
+			break;
 		default:
 			return;
 		}
 	}
-	//functions 
+
+	// functions
 	public static void Load_value(int num) {// 1
 		AC = num;
 	}
 
 	public static void Load_addr(PrintWriter pw, InputStream is, int addr) {// 2
-		pw.printf("read " + (addr) + "\n"); // print "read X\n" to the print writer
-		pw.flush(); // Printwriter is just the RAM's input, so you're telling RAM "read _"
-		Scanner sc = new Scanner(is); // initialize scanner to receive input
-		String line = sc.nextLine(); // get the output through the scanners next line.
-		int num = Integer.parseInt(line); // translate output(input?) to an int
+		int num = readInstructionX(pw, is, addr);
 		AC = num;
-		sc.close();
-		
+
 	}
 
 	public static void LoadInd_addr(PrintWriter pw, InputStream is, int addr) {// 3
 		// pt 1 load value found at address
-		pw.printf("read " + (addr) + "\n"); // print "read X\n" to the print writer
-		pw.flush(); // Printwriter is just the RAM's input, so you're telling RAM "read _"
-		Scanner sc = new Scanner(is); // initialize scanner to receive input
-		String line = sc.nextLine(); // get the output through the scanners next line.
-		int num = Integer.parseInt(line); // translate output(input?) to an int
-		sc.close();// just reuse same scanner? >.<
+		int num = readInstructionX(pw, is, addr);
 		// pt2 now read at that value
-		pw.printf("read " + (num) + "\n"); // print "read X\n" to the print writer
-		pw.flush(); // Printwriter is just the RAM's input, so you're telling RAM "read _"
-		Scanner sc2 = new Scanner(is); // initialize scanner to receive input
-		String line2 = sc2.nextLine(); // get the output through the scanners next line.
-		int num2 = Integer.parseInt(line2); // translate output(input?) to an int
+		int num2 = readInstructionX(pw, is, num);
 		AC = num2;
-		sc2.close();
 
-		// int NewIndex = mem.readMemory(addr);
-		// AC = mem.readMemory(NewIndex);
 	}
 
 	public static void LoadIdxX_addr(PrintWriter pw, InputStream is, int addr) {// 4
 		int NewIndex = addr + X;
-		pw.printf("read " + (NewIndex) + "\n"); // print "read X\n" to the print writer
-		pw.flush(); // Printwriter is just the RAM's input, so you're telling RAM "read _"
-		Scanner sc = new Scanner(is); // initialize scanner to receive input
-		String line = sc.nextLine(); // get the output through the scanners next line.
-		int num = Integer.parseInt(line); // translate output(input?) to an int
+		int num = readInstructionX(pw, is, NewIndex);
 		AC = num;
-		// AC = mem.readMemory(NewIndex);
-		sc.close();
+
 	}
 
 	public static void LoadIdxY_addr(PrintWriter pw, InputStream is, int addr) {// 5
 		int NewIndex = addr + Y;
-		pw.printf("read " + (NewIndex) + "\n"); // print "read X\n" to the print writer
-		pw.flush(); // Printwriter is just the RAM's input, so you're telling RAM "read _"
-		Scanner sc = new Scanner(is); // initialize scanner to receive input
-		String line = sc.nextLine(); // get the output through the scanners next line.
-		int num = Integer.parseInt(line); // translate output(input?) to an int
+		int num = readInstructionX(pw, is, NewIndex);
 		AC = num;
-		sc.close();
-		// AC = mem.readMemory(NewIndex);
+
 	}
 
 	public static void LoadSpX(PrintWriter pw, InputStream is) {// 6
 		int NewIndex = SP + X;
-		pw.printf("read " + (NewIndex) + "\n"); // print "read X\n" to the print writer
-		pw.flush(); // Printwriter is just the RAM's input, so you're telling RAM "read _"
-		Scanner sc = new Scanner(is); // initialize scanner to receive input
-		String line = sc.nextLine(); // get the output through the scanners next line.
-		int num = Integer.parseInt(line); // translate output(input?) to an int
+		int num = readInstructionX(pw, is, NewIndex);
 		AC = num;
-		sc.close();
-		// AC = mem.readMemory(NewIndex);
+
 	}
 
 	public static void Store_addr(PrintWriter pw, InputStream is, int addr) {// 7
 		pw.printf("write " + AC + "\n");
 		pw.flush();
-		// mem.writeMemory(AC, addr);
 	}
 
 	public static void get() {// 8
@@ -278,9 +296,9 @@ public class CPU {
 
 	public static void Put_port(int port) {// 9
 		if (port == 1) {
-			System.out.println(AC);
+			System.out.print(AC);
 		} else {
-			System.out.println((char) AC);
+			System.out.print((char) AC);
 		}
 	}
 
@@ -318,6 +336,7 @@ public class CPU {
 
 	public static void CopyToSp() {// 18
 		SP = AC;
+		SP--; //Decrement stack pointer? unsure about this
 	}
 
 	public static void CopyFromSp() {// 19
@@ -325,18 +344,19 @@ public class CPU {
 	}
 
 	public static void Jump_addr(int Addr) { // 20
-		PC = Addr; // ???
+		PC = Addr - 1; // You have to subtract 1 from the address so it when it loads the next
+						// instruction, it loads the right address
 	}
 
 	public static void JumpIfEqual_addr(int Addr) {// 21
 		if (AC == 0) {
-			PC = Addr;
+			PC = Addr - 1;
 		}
 	}
 
 	public static void JumpIfNotEqual_addr(int Addr) {// 22
 		if (AC != 0) {
-			PC = Addr;
+			PC = Addr - 1;
 		}
 	}
 
@@ -345,22 +365,17 @@ public class CPU {
 		pw.flush(); // Printwriter is just the RAM's input, so you're telling RAM "read _"
 		// mem.writeMemory(PC, SP); // save the PC counter address to the stack pointer
 		// address? Maybe increment
-		PC = Addr; // Now change PC to address
+		PC = Addr - 1; // Now change PC to address
 		SP--; // Decrement Stack Pointer
 	}
 
 	public static void Ret(PrintWriter pw, InputStream is) {// 24
 		SP++; // Increment Stack Pointer (This is popping)
 		//
-		pw.printf("read " + (SP) + "\n"); // print "read X\n" to the print writer
-		pw.flush(); // Printwriter is just the RAM's input, so you're telling RAM "read _"
-		Scanner sc = new Scanner(is); // initialize scanner to receive input
-		String line = sc.nextLine(); // get the output through the scanners next line.
-		int num = Integer.parseInt(line); // translate output(input?) to an int
-		sc.close();
+		int num = readInstructionX(pw, is, SP);
 		//
 		// int Addr = mem.readMemory(SP);// pop address from stack
-		PC = num;// Now change back? Could we not have just copied from SP?
+		PC = num - 1;// Now change back? Could we not have just copied from SP?
 	}
 
 	public static void IncX() {// 25
@@ -381,17 +396,13 @@ public class CPU {
 
 	public static void Pop(PrintWriter pw, InputStream is) {// 28
 		SP++;
-		pw.printf("read " + (SP) + "\n"); // print "read X\n" to the print writer
-		pw.flush(); // Printwriter is just the RAM's input, so you're telling RAM "read _"
-		Scanner sc = new Scanner(is); // initialize scanner to receive input
-		String line = sc.nextLine(); // get the output through the scanners next line.
-		int num = Integer.parseInt(line); // translate output(input?) to an int
+		int num = readInstructionX(pw, is, SP);
 		AC = num;
-		sc.close();
 		// AC = mem.readMemory(SP); // maybe change?
 	}
 
 	public static void Int(PrintWriter pw, InputStream is) {// 29 ?????
+		KernelMode = true;
 		pw.printf("write " + (SP) + " " + (1999) + "\n"); // print "read X\n" to the print writer
 		pw.flush(); // Printwriter is just the RAM's input, so you're telling RAM "read _"
 		// mem.writeMemory(SP, 1999);// save Stack pointer to system stack
@@ -401,37 +412,47 @@ public class CPU {
 		pw.flush(); // Printwriter is just the RAM's input, so you're telling RAM "read _"
 		// mem.writeMemory(PC, SP); // save PC counter to system stack
 		SP--; // decrement system stack
-		PC = 1500; // switch address to 1500, interrupt instructions
+		PC = 1499; // switch address to 1500, interrupt instructions
 		while (!isAtSystemEnd()) {
 			ScanToken(pw, is);
 		}
+		KernelMode = false;
+	}
+
+	public static void TimerInt(PrintWriter pw, InputStream is) {// 29 ?????
+		KernelMode = true;
+		pw.printf("write " + (SP) + " " + (1999) + "\n"); // print "read X\n" to the print writer
+		pw.flush(); // Printwriter is just the RAM's input, so you're telling RAM "read _"
+		// mem.writeMemory(SP, 1999);// save Stack pointer to system stack
+		SP = 1999;// switch to system stack
+		SP--;// decrement system stack
+		pw.printf("write " + (PC) + " " + (SP) + "\n"); // print "read X\n" to the print writer
+		pw.flush(); // Printwriter is just the RAM's input, so you're telling RAM "read _"
+		// mem.writeMemory(PC, SP); // save PC counter to system stack
+		SP--; // decrement system stack
+		PC = 999; // switch address to 1500, interrupt instructions
+		while (!isAtSystemEnd()) {
+			ScanToken(pw, is);
+		}
+		KernelMode = false;
 	}
 
 	public static void IRet(PrintWriter pw, InputStream is) {// 30 ?????
 		SP++;
-		pw.printf("read " + (SP) + "\n"); // print "read X\n" to the print writer
-		pw.flush(); // Printwriter is just the RAM's input, so you're telling RAM "read _"
-		Scanner sc = new Scanner(is); // initialize scanner to receive input
-		String line = sc.nextLine(); // get the output through the scanners next line.
-		int num = Integer.parseInt(line); // translate output(input?) to an int
-		PC = num;
+		int num = readInstructionX(pw, is, SP);
+		PC = num - 1;
 		// PC = mem.readMemory(SP); // grab PC
 		SP++;
 		// pt 2 delete later maybe
-		pw.printf("read " + (SP) + "\n"); // print "read X\n" to the print writer
-		pw.flush(); // Printwriter is just the RAM's input, so you're telling RAM "read _"
-		Scanner sc2 = new Scanner(is); // initialize scanner to receive input
-		String line2 = sc2.nextLine(); // get the output through the scanners next line.
-		int num2 = Integer.parseInt(line2); // translate output(input?) to an int
+		int num2 = readInstructionX(pw, is, SP);
 		SP = num2;
-
-		// SP = mem.readMemory(SP); // Grab stack pointer
-		while (!isAtEnd()) {
-			ScanToken(pw, is);
-		}
+		// while (!isAtEnd()) {
+		// ScanToken(pw, is);
+		// }
 	}
 
 	public static void End() {// 50
+		end = true;
 		return; // ???
 	}
 }
